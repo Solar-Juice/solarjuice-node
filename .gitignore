@@ -1,0 +1,18 @@
+# Dependencies (this package has none, but a local experiment might)
+node_modules/
+package-lock.json
+
+# Build and test output
+coverage/
+*.tgz
+.nyc_output/
+
+# Secrets. API keys belong in a secrets manager, never in the tree.
+.env
+.env.*
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp

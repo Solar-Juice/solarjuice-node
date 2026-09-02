@@ -1,0 +1,52 @@
+{
+  "name": "@solarjuice/partner-api",
+  "version": "1.0.0",
+  "description": "Node.js client for the Solar Juice Partner API: catalogue, inventory, specials, freight quotes and orders.",
+  "keywords": [
+    "solarjuice",
+    "solar",
+    "partner-api",
+    "catalogue",
+    "inventory",
+    "freight",
+    "orders"
+  ],
+  "homepage": "https://dev.solarjuice.com.au",
+  "bugs": {
+    "url": "https://github.com/Solar-Juice/solarjuice-node/issues",
+    "email": "developers@solarjuice.com.au"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Solar-Juice/solarjuice-node.git"
+  },
+  "license": "MIT",
+  "author": "Solar Juice <developers@solarjuice.com.au> (https://dev.solarjuice.com.au)",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "spec",
+    "index.d.ts",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test",
+    "check": "npm run lint && npm test"
+  }
+}

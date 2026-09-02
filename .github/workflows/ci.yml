@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minimum supported version and the current release line, plus the
+        # active LTS in between, because global fetch and the built in test
+        # runner both moved between them.
+        node: ['18', '20', '22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # There is no install step. The package has no dependencies, runtime or
+      # development, so there is nothing to fetch and nothing to cache.
+      - name: Syntax check
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Catches a file left out of the "files" list before a partner does.
+      - name: Inspect the publishable tarball
+        run: npm pack --dry-run
