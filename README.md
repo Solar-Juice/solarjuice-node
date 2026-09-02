@@ -156,24 +156,34 @@ Totals on the response are computed by the API and are authoritative.
 
 ### Idempotency
 
-`orders.create` always sends an `Idempotency-Key` header. Pass your own to
-repeat a submission safely, or let the client generate a UUID v4. Either way
-the key used is on the result as `idempotencyKey`, so you can log it against
-your own record:
+`client_reference` in the body is the only idempotency key. The same reference
+with the same body returns the order that already exists (`200` rather than the
+first call's `202`); the same reference with a different body raises
+`IdempotencyConflictError`. Sandbox and live keys have separate reference
+namespaces.
 
 ```js
-const order = await client.orders.create(body, { idempotencyKey: 'PO-88213-attempt-2' });
-console.log(order.idempotencyKey);
+const order = await client.orders.create({ client_reference: 'PO-88213', ...rest });
 ```
 
-The key that actually governs the API's behaviour is `client_reference` in the
-body: the same reference with the same body returns the original receipt, and
-the same reference with a different body raises `IdempotencyConflictError`.
+`orders.create` also sends an `Idempotency-Key` header, yours if you pass
+`idempotencyKey` and a generated UUID v4 otherwise, and reports it back as
+`order.idempotencyKey`. The API accepts that header and ignores it: it is not
+stored, not compared and not returned, so it is a local correlation value for
+your own logs and nothing more. Do not rely on it to deduplicate or to
+reconcile a create that timed out. To find an order again after a timeout,
+list by your own reference:
+
+```js
+const { items } = await client.orders.list({ client_reference: 'PO-88213' });
+```
 
 ### Polling an order
 
-Acceptance is asynchronous. Poll with the ETag from the previous fetch and an
-unchanged order costs you a small `304` instead of a full body. The client
+Validation and acceptance are synchronous: a created order is already
+`accepted`. What you are polling for is fulfilment, which operations drive.
+Poll with the ETag from the previous fetch and an unchanged order costs you a
+small `304` instead of a full body. The client
 returns `null` for a `304` rather than raising, because not modified is a
 normal polling outcome:
 
@@ -248,7 +258,7 @@ honoured in preference to the computed delay. Other 4xx responses are not
 retried, because they will fail the same way twice.
 
 `GET` and both `POST` endpoints are safe to retry: quotes have no side effects,
-and orders carry an idempotency key.
+and orders are deduplicated by `client_reference`.
 
 Set `maxRetries: 0` if you would rather handle backoff yourself.
 
