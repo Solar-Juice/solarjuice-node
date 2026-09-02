@@ -5,9 +5,22 @@
  * same on any runtime with a Web Crypto global, including edge runtimes where
  * randomUUID is not always present.
  */
+
+/*
+ * Node 18 only exposes the Web Crypto global under
+ * --experimental-global-webcrypto, and it is a supported runtime here, so
+ * fall back to the built-in module on that one case. Every other target
+ * (Node 19 and later, Deno, Bun, workers) has the global, so the import
+ * never runs and nothing outside a Node process ever references node:crypto.
+ */
+const webcrypto =
+  typeof globalThis.crypto?.getRandomValues === 'function'
+    ? globalThis.crypto
+    : (await import('node:crypto')).webcrypto;
+
 export function uuidv4() {
   const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
+  webcrypto.getRandomValues(bytes);
 
   bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
   bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
