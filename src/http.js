@@ -1,10 +1,11 @@
 import {
   ConfigurationError,
+  SolarJuiceError,
   TimeoutError,
   TransportError,
   errorFromResponse,
 } from './errors.js';
-import { RETRYABLE_STATUSES, backoffDelay, retryAfterMs } from './retry.js';
+import { MAX_RETRY_AFTER_MS, RETRYABLE_STATUSES, backoffDelay, retryAfterMs } from './retry.js';
 import { VERSION } from './version.js';
 
 export const DEFAULT_BASE_URL = 'https://api.solarjuice.com.au';
@@ -27,7 +28,7 @@ export class Transport {
    * @param {object} options
    * @param {string} options.apiKey
    * @param {string} [options.baseUrl]
-   * @param {number} [options.timeout] Seconds.
+   * @param {number} [options.timeout] Deadline in seconds for a whole attempt, response body included.
    * @param {number} [options.maxRetries]
    * @param {string} [options.userAgent] Suffix appended to the SDK User-Agent.
    * @param {typeof fetch} [options.fetch] Replacement fetch, for proxies or tests.
@@ -37,8 +38,8 @@ export class Transport {
     this.#apiKey = options.apiKey;
     // Trailing slashes would produce "//v1/catalogue" once a path is appended.
     this.baseUrl = String(options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-    this.timeout = numberOption(options.timeout, DEFAULT_TIMEOUT_SECONDS, 'timeout');
-    this.maxRetries = numberOption(options.maxRetries, DEFAULT_MAX_RETRIES, 'maxRetries');
+    this.timeout = timeoutOption(options.timeout);
+    this.maxRetries = retryCountOption(options.maxRetries);
     this.userAgent = buildUserAgent(options.userAgent);
 
     if (options.fetch) {
@@ -103,27 +104,46 @@ export class Transport {
         continue;
       }
 
-      const { response } = outcome;
-      this.#recordHeaders(response.headers);
+      const { status, headers: responseHeaders, text } = outcome;
+      this.#recordHeaders(responseHeaders);
 
-      if (response.status < 400) {
-        return { status: response.status, headers: response.headers, data: await decode(response) };
+      // Redirects are never followed. A 3xx from the API host means something
+      // in front of the API answered, so its body is somebody else's page and
+      // returning it would look exactly like a successful call.
+      if (status >= 300 && status < 400 && status !== 304) {
+        throw redirectError(status, responseHeaders);
       }
 
-      const rawBody = await readText(response);
-      const apiError = errorFromResponse(response.status, response.headers, parseJson(rawBody), rawBody);
+      if (status < 400) {
+        return { status, headers: responseHeaders, data: decode(status, responseHeaders, text) };
+      }
 
-      if (!RETRYABLE_STATUSES.has(response.status) || attempt >= this.maxRetries) {
+      const apiError = errorFromResponse(status, responseHeaders, parseJson(text), text);
+
+      if (!RETRYABLE_STATUSES.has(status) || attempt >= this.maxRetries) {
         throw apiError;
       }
 
       // The API knows when it will be ready again, so its Retry-After beats
       // anything computed locally.
-      const advised = retryAfterMs(response.headers.get?.('Retry-After'));
+      const advised = retryAfterMs(responseHeaders.get?.('Retry-After'));
+
+      // An edge proxy in front of the API is not bound by the API's own small
+      // values and can advise an hour. Blocking a caller's request or worker
+      // for that long is worse than failing, so hand the error back with the
+      // real value on it and let them schedule the retry themselves.
+      if (advised !== null && advised > MAX_RETRY_AFTER_MS) throw apiError;
+
       await this.#sleep(advised ?? backoffDelay(attempt));
     }
   }
 
+  /**
+   * One attempt: send the request and read the whole response under a single
+   * deadline.
+   *
+   * @returns {Promise<{status: number|null, headers: Headers|null, text: string, error: SolarJuiceError|null}>}
+   */
   async #send(method, url, headers, body) {
     const controller = new AbortController();
     let timedOut = false;
@@ -137,31 +157,45 @@ export class Transport {
         method,
         headers,
         body,
+        // See request(): a 3xx is an error here, not a hop to make.
+        redirect: 'manual',
         signal: controller.signal,
       });
-      return { response, error: null };
+
+      // fetch settles when the headers arrive, so the body has to be read here
+      // while the abort is still armed. Reading it after the timer is cleared
+      // leaves a server that stalls mid body running with no deadline at all.
+      const text = await readText(response, () => timedOut || controller.signal.aborted);
+
+      return { status: response.status, headers: response.headers, text, error: null };
     } catch (cause) {
       const error = timedOut
         ? new TimeoutError(`${method} ${url} timed out after ${this.timeout}s`, { cause })
         : new TransportError(`${method} ${url} failed: ${cause?.message ?? cause}`, { cause });
-      return { response: null, error };
+      return { status: null, headers: null, text: '', error };
     } finally {
       clearTimeout(timer);
     }
   }
 
+  /**
+   * Every field here keeps its last seen value when the response omits the
+   * header. /v1/health sends none of them and neither does an edge error page,
+   * and wiping the rate limit window on those took the reading away exactly
+   * when a caller needed it.
+   */
   #recordHeaders(headers) {
     if (typeof headers?.get !== 'function') return;
 
     this.rateLimit = {
-      limit: intOrNull(headers.get('RateLimit-Limit')),
-      remaining: intOrNull(headers.get('RateLimit-Remaining')),
-      reset: intOrNull(headers.get('RateLimit-Reset')),
+      limit: intIfPresent(headers, 'RateLimit-Limit', this.rateLimit.limit),
+      remaining: intIfPresent(headers, 'RateLimit-Remaining', this.rateLimit.remaining),
+      reset: intIfPresent(headers, 'RateLimit-Reset', this.rateLimit.reset),
     };
-    this.lastRequestId = headers.get('X-Request-Id');
 
-    // ETag and the price list version are only sent by some operations, so
-    // keep the last value seen rather than clearing it on every response.
+    const requestId = headers.get('X-Request-Id');
+    if (requestId) this.lastRequestId = requestId;
+
     const etag = headers.get('ETag');
     if (etag) this.lastEtag = etag;
 
@@ -200,23 +234,68 @@ export function buildUserAgent(suffix) {
   return trimmed ? `${base} ${trimmed}` : base;
 }
 
-async function decode(response) {
+/**
+ * Turn a successful response body into the object the caller expects.
+ *
+ * @param {number} status
+ * @param {Headers} headers
+ * @param {string} text
+ * @returns {object|null}
+ */
+function decode(status, headers, text) {
   // 204 and 304 carry no body, and a body-less 200 is not worth failing over.
-  const text = await readText(response);
-  if (text === '') return null;
+  if (text.trim() === '') return null;
 
   const parsed = parseJson(text);
-  return parsed === undefined ? text : parsed;
+
+  if (!isJsonObject(parsed)) {
+    // A 2xx that is not the documented envelope is almost never the API
+    // answering: a captive portal, a proxy notice, an error page served with a
+    // 200. Returning it would surface much later as an undefined `items`, so
+    // fail here where the status and request id still explain it.
+    throw new SolarJuiceError(
+      `The Solar Juice Partner API returned a ${status} body that is not a JSON object.`,
+      { statusCode: status, requestId: headers?.get?.('X-Request-Id') ?? null },
+    );
+  }
+
+  return parsed;
 }
 
-async function readText(response) {
+/**
+ * @param {number} status
+ * @param {Headers} headers
+ * @returns {SolarJuiceError}
+ */
+function redirectError(status, headers) {
+  const location = headers?.get?.('Location');
+  const target = location ? ` to ${location}` : '';
+
+  return new SolarJuiceError(
+    `The Solar Juice Partner API answered ${status} with a redirect${target}, which this client does not follow. Check baseUrl and anything proxying it.`,
+    { statusCode: status, requestId: headers?.get?.('X-Request-Id') ?? null },
+  );
+}
+
+/**
+ * @param {Response} response
+ * @param {() => boolean} deadlineBreached
+ * @returns {Promise<string>}
+ */
+async function readText(response, deadlineBreached) {
   try {
     return await response.text();
-  } catch {
-    // The status line arrived but the body did not. There is nothing useful to
-    // report beyond the status, which the caller already has.
+  } catch (cause) {
+    // A read that failed because the deadline fired is a timeout, and has to
+    // reach the retry loop as one. Anything else means the status line arrived
+    // but the body did not, which still leaves the status worth reporting.
+    if (deadlineBreached()) throw cause;
     return '';
   }
+}
+
+function isJsonObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parseJson(text) {
@@ -242,10 +321,25 @@ function intOrNull(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function numberOption(value, fallback, name) {
-  if (value === undefined || value === null) return fallback;
+function intIfPresent(headers, name, previous) {
+  const raw = headers.get(name);
+  return raw === null || raw === undefined || raw === '' ? previous : intOrNull(raw);
+}
+
+function timeoutOption(value) {
+  if (value === undefined || value === null) return DEFAULT_TIMEOUT_SECONDS;
+  // Zero is not "no timeout" here: it aborts every request the moment it is
+  // sent, which reads as a network fault rather than a misconfiguration.
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new ConfigurationError('timeout must be a positive number of seconds');
+  }
+  return value;
+}
+
+function retryCountOption(value) {
+  if (value === undefined || value === null) return DEFAULT_MAX_RETRIES;
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new ConfigurationError(`${name} must be a non negative number`);
+    throw new ConfigurationError('maxRetries must be zero or a positive number');
   }
   return value;
 }

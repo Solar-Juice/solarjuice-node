@@ -24,7 +24,8 @@ export class OrdersResource {
    * `idempotencyKey` so it can be logged against the caller's own record.
    *
    * Note that `client_reference` in the body is the reference the API
-   * deduplicates on; the header is recorded alongside it.
+   * deduplicates on. The API accepts the header and ignores it: no handler
+   * reads it, so it is a local correlation value for the caller's own logs.
    *
    * @param {object} body The order request.
    * @param {object} [options]
@@ -85,5 +86,32 @@ export class OrdersResource {
     );
 
     return status === 304 ? null : data;
+  }
+
+  /**
+   * Cancel an order before it reaches operations.
+   *
+   * The API allows this while the order is `received`, `accepted` or
+   * `on_hold`, and refuses it with a 422 once operations hold it. `cancelled`
+   * is terminal, so a second call is refused rather than being a no-op: check
+   * the status you already hold before calling.
+   *
+   * @param {string} id Order id.
+   * @param {object} [options]
+   * @param {string} [options.note] Why it is being cancelled. Recorded on the event.
+   * @returns {Promise<object>} The order at its new status, with the cancellation in `events`.
+   */
+  async cancel(id, options = {}) {
+    // The body is optional at the API, so send nothing at all rather than an
+    // empty object when there is no note to record.
+    const body = options.note === undefined ? undefined : { note: options.note };
+
+    const { data } = await this.#transport.request(
+      'POST',
+      `/v1/orders/${encodeURIComponent(id)}/cancel`,
+      { body },
+    );
+
+    return data;
   }
 }

@@ -34,6 +34,7 @@ const IMPLEMENTATIONS = {
   createOrder: { call: 'orders.create(body)', invoke: (client) => client.orders.create({ client_reference: 'PO-88213' }) },
   listOrders: { call: 'orders.list()', invoke: (client) => client.orders.list() },
   getOrder: { call: 'orders.get(id)', invoke: (client) => client.orders.get(SAMPLE.id) },
+  cancelOrder: { call: 'orders.cancel(id)', invoke: (client) => client.orders.cancel(SAMPLE.id) },
   getHealth: { call: 'health()', invoke: (client) => client.health() },
 };
 

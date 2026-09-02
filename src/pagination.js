@@ -22,7 +22,11 @@ export async function* paginate(fetchPage) {
     }
 
     const next = page?.next_cursor ?? null;
-    if (next === null) return;
+
+    // Null and an empty string both mean "there is no next page". An empty
+    // cursor is not a cursor to send back, and treating it as one turns the
+    // last page of a sync into a stall.
+    if (next === null || next === '') return;
 
     // A cursor that does not move would loop forever and quietly burn the
     // caller's rate limit, so fail loudly instead.

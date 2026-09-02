@@ -18,6 +18,16 @@ export const INITIAL_BACKOFF_MS = 500;
 export const MAX_BACKOFF_MS = 8000;
 
 /**
+ * The longest Retry-After this client will actually wait out.
+ *
+ * The API's own values are seconds, but an edge proxy in front of it is not
+ * bound by that and can advise an hour. Sleeping that long inside a caller's
+ * request is worse than failing, so anything above the cap raises immediately
+ * with the real value on the error.
+ */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
+/**
  * Full jitter exponential backoff: a uniform pick from [0, ceiling] rather
  * than the ceiling itself, so a fleet of workers that hit a 429 together does
  * not come back as a synchronised thundering herd.

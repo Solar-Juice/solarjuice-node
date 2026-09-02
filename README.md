@@ -53,7 +53,7 @@ a key, and raises `ConfigurationError` when there is no key either way.
 const client = new SolarJuiceClient({
   apiKey: process.env.SOLARJUICE_API_KEY, // default
   baseUrl: 'https://api.solarjuice.com.au', // default
-  timeout: 30, // seconds per attempt
+  timeout: 30, // seconds, the deadline for a whole attempt including the body
   maxRetries: 3,
   userAgent: 'acme-storefront/2.1', // appended to the SDK User-Agent
 });
@@ -75,6 +75,7 @@ be revoked at any time.
 | `client.orders.create(body, options)` | `POST /v1/orders` |
 | `client.orders.list(params)` | `GET /v1/orders` |
 | `client.orders.get(id, options)` | `GET /v1/orders/{id}` |
+| `client.orders.cancel(id, options)` | `POST /v1/orders/{id}/cancel` |
 | `client.health()` | `GET /v1/health` |
 
 Every list call also has an `autoPage()` variant. Money is a decimal string
@@ -99,6 +100,10 @@ for await (const product of client.catalogue.autoPage({ category: 'Panel' })) {
   await upsert(product);
 }
 ```
+
+`autoPage()` stops when `next_cursor` comes back null or empty, and raises
+`SolarJuiceError` with `code: 'PAGINATION_STALLED'` if the API ever returns the
+same cursor twice, rather than looping and burning your rate limit.
 
 Cursors are opaque and are bound to the query they were issued with, so do not
 change `limit` or a filter part way through. To sync incrementally, keep the
@@ -202,6 +207,25 @@ A missing order still raises `NotFoundError`, so `null` only ever means "not
 modified". Polling every order at once with
 `client.orders.list({ updated_since })` is cheaper again.
 
+### Cancelling an order
+
+You can cancel your own order while it is `received`, `accepted` or `on_hold`,
+which in practice means before operations key it into the fulfilment system.
+The note is optional and is recorded on the event:
+
+```js
+const cancelled = await client.orders.cancel(order.id, {
+  note: 'Customer changed the panel selection',
+});
+
+console.log(cancelled.status); // "cancelled"
+```
+
+Once the order is `processing` or beyond, the API refuses with
+`ValidationFailedError` and the cancellation has to go through your account
+manager. `cancelled` is terminal, so a second call is refused rather than
+being a no-op: check the status you already hold before calling.
+
 ## Errors
 
 Everything the client throws extends `SolarJuiceError`, which carries `code`,
@@ -257,15 +281,37 @@ jitter, starting at 500ms and capped at 8s, and a `Retry-After` header is
 honoured in preference to the computed delay. Other 4xx responses are not
 retried, because they will fail the same way twice.
 
-`GET` and both `POST` endpoints are safe to retry: quotes have no side effects,
+`Retry-After` is honoured up to 60 seconds. Above that the client does not
+sleep: it raises straight away with the API's real value on
+`error.retryAfter`, so you can schedule the work rather than block a request
+or a worker for the length of an edge proxy's advice.
+
+`GET` and the `POST` endpoints are safe to retry: quotes have no side effects,
 and orders are deduplicated by `client_reference`.
 
 Set `maxRetries: 0` if you would rather handle backoff yourself.
 
+## Timeouts
+
+`timeout` (default 30 seconds) is a deadline for the whole exchange, not just
+for the connection or the headers: it covers reading the response body too, so
+a server that answers and then stalls part way through a page still fails at
+the deadline with a `TimeoutError`, and that error is retried like any other
+transport failure. It must be greater than zero.
+
+The client never follows a redirect. A `3xx` other than `304` raises
+`SolarJuiceError` carrying the status, because a redirect from the API host
+means something in front of the API answered and its body is not an API
+response. Likewise a `2xx` whose body is not a JSON object raises rather than
+being handed back, which is what a captive portal or a proxy notice looks
+like.
+
 ## Rate limits and observability
 
 The API allows 600 requests per minute per key by default and sends the state
-of your window on every response. The client keeps the last values seen:
+of your window on every response. The client keeps the last value seen for
+each field, and a response that omits a header leaves that field alone rather
+than clearing it, so a `health()` call in between does not wipe your window:
 
 ```js
 await client.catalogue.list();

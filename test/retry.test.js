@@ -5,6 +5,7 @@ import { RateLimitedError, TransportError } from '../src/index.js';
 import {
   INITIAL_BACKOFF_MS,
   MAX_BACKOFF_MS,
+  MAX_RETRY_AFTER_MS,
   RETRYABLE_STATUSES,
   backoffDelay,
   retryAfterMs,
@@ -77,6 +78,32 @@ describe('retry policy', () => {
 
     await client.health();
     assert.deepEqual(sleeps, [7000]);
+  });
+
+  it('honours a Retry-After up to the cap', async () => {
+    const { client, sleeps } = makeClient([
+      errorResponse(429, 'RATE_LIMITED', { headers: { 'Retry-After': '60' } }),
+      jsonResponse({ status: 'ok' }),
+    ]);
+
+    await client.health();
+    assert.deepEqual(sleeps, [MAX_RETRY_AFTER_MS]);
+  });
+
+  it('refuses to sleep a Retry-After above the cap and raises with the real value', async () => {
+    const { client, calls, sleeps } = makeClient([
+      errorResponse(429, 'RATE_LIMITED', { headers: { 'Retry-After': '3600' } }),
+    ]);
+
+    await assert.rejects(client.health(), (error) => {
+      assert.ok(error instanceof RateLimitedError);
+      // The caller needs the API's own number to schedule the work, not the cap.
+      assert.equal(error.retryAfter, 3600);
+      return true;
+    });
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(sleeps, []);
   });
 
   it('retries transient 5xx responses', async () => {

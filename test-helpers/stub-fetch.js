@@ -43,6 +43,46 @@ export function notModifiedResponse(etag) {
 }
 
 /**
+ * A JSON response with none of the observability headers, which is what
+ * /v1/health and anything answered by an edge in front of the API look like.
+ */
+export function bareResponse(body, headers = {}) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', ...headers },
+  });
+}
+
+/** A redirect, as an edge or a misconfigured base URL would answer. */
+export function redirectResponse(status = 302, location = 'https://portal.example.com/login') {
+  return new Response('', { status, headers: { Location: location } });
+}
+
+/**
+ * Headers, then a body that never finishes.
+ *
+ * The stream errors when the request signal aborts, which is what undici does,
+ * so a client that has already cleared its timer by the time it reads the body
+ * waits here forever.
+ */
+export function stallingBodyResponse(status = 200) {
+  return (_url, init = {}) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"as_of":"2026-09-02T04:10:11Z","items":'));
+          init.signal?.addEventListener('abort', () => {
+            const error = new Error('The operation was aborted');
+            error.name = 'AbortError';
+            controller.error(error);
+          });
+        },
+      }),
+      { status, headers: { 'Content-Type': 'application/json', 'X-Request-Id': REQUEST_ID } },
+    );
+}
+
+/**
  * A fetch that replies from a queue and records what it was asked for.
  *
  * A queue entry may be a Response, an Error to throw (a transport failure), or
@@ -60,6 +100,7 @@ export function stubFetch(replies = []) {
       method: init.method,
       headers: init.headers ?? {},
       body: init.body === undefined ? undefined : JSON.parse(init.body),
+      redirect: init.redirect,
       signal: init.signal,
     };
     calls.push(call);

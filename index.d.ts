@@ -58,9 +58,12 @@ export interface ClientOptions {
   apiKey?: string;
   /** Defaults to https://api.solarjuice.com.au. */
   baseUrl?: string;
-  /** Per attempt timeout in seconds. Default 30. */
+  /**
+   * Deadline in seconds for a whole attempt, including reading the response
+   * body. Must be greater than zero. Default 30.
+   */
   timeout?: number;
-  /** Retries after the first attempt. Default 3. */
+  /** Retries after the first attempt. Zero or more. Default 3. */
   maxRetries?: number;
   /** Appended to the SDK User-Agent, for example "acme-storefront/2.1". */
   userAgent?: string;
@@ -389,12 +392,19 @@ export interface GetOrderOptions {
   ifNoneMatch?: string;
 }
 
+export interface CancelOrderOptions {
+  /** Why the order is being cancelled. Recorded on the event. */
+  note?: string;
+}
+
 export declare class OrdersResource {
   create(body: OrderRequest, options?: CreateOrderOptions): Promise<OrderReceipt>;
   list(params?: OrdersListParams): Promise<OrderList>;
   autoPage(params?: Omit<OrdersListParams, 'cursor'>): AsyncGenerator<Order, void, undefined>;
   /** Resolves to null when an If-None-Match ETag still matches. */
   get(id: string, options?: GetOrderOptions): Promise<Order | null>;
+  /** Cancel while the order is received, accepted or on_hold. */
+  cancel(id: string, options?: CancelOrderOptions): Promise<Order>;
 }
 
 export declare class SolarJuiceClient {

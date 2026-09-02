@@ -22,7 +22,7 @@ export class SolarJuiceClient {
    * @param {object} [options]
    * @param {string} [options.apiKey] Defaults to the SOLARJUICE_API_KEY environment variable.
    * @param {string} [options.baseUrl] Defaults to https://api.solarjuice.com.au.
-   * @param {number} [options.timeout] Per attempt timeout in seconds. Default 30.
+   * @param {number} [options.timeout] Deadline in seconds for a whole attempt, response body included. Default 30.
    * @param {number} [options.maxRetries] Retries after the first attempt. Default 3.
    * @param {string} [options.userAgent] Suffix appended to the SDK User-Agent, for example "acme-storefront/2.1".
    * @param {typeof fetch} [options.fetch] Replacement fetch, for a proxy agent or for tests.

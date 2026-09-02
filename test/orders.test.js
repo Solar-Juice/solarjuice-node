@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { NotFoundError } from '../src/index.js';
+import { NotFoundError, ValidationFailedError } from '../src/index.js';
 import { uuidv4 } from '../src/uuid.js';
 import { errorResponse, jsonResponse, makeClient, notModifiedResponse } from '../test-helpers/stub-fetch.js';
 
@@ -107,6 +107,51 @@ describe('orders.get', () => {
     const { client } = makeClient([errorResponse(404, 'NOT_FOUND')], { maxRetries: 0 });
 
     await assert.rejects(client.orders.get('ord_00000000000000000000000000'), NotFoundError);
+  });
+});
+
+describe('orders.cancel', () => {
+  const cancelled = () => jsonResponse({ id: ORDER_ID, status: 'cancelled' });
+
+  it('posts to the cancel route and returns the updated order', async () => {
+    const { client, calls } = makeClient([cancelled()]);
+
+    const order = await client.orders.cancel(ORDER_ID);
+
+    assert.equal(calls[0].method, 'POST');
+    assert.equal(calls[0].path, `/v1/orders/${ORDER_ID}/cancel`);
+    assert.equal(order.status, 'cancelled');
+  });
+
+  it('sends no body when there is no note, because the body is optional', async () => {
+    const { client, calls } = makeClient([cancelled()]);
+
+    await client.orders.cancel(ORDER_ID);
+
+    assert.equal(calls[0].body, undefined);
+    assert.equal('Content-Type' in calls[0].headers, false);
+  });
+
+  it('sends the note when one is given', async () => {
+    const { client, calls } = makeClient([cancelled()]);
+
+    await client.orders.cancel(ORDER_ID, { note: 'Customer changed the panel selection' });
+
+    assert.deepEqual(calls[0].body, { note: 'Customer changed the panel selection' });
+  });
+
+  it('percent encodes the order id', async () => {
+    const { client, calls } = makeClient([cancelled()]);
+
+    await client.orders.cancel('ord/1');
+
+    assert.equal(calls[0].path, '/v1/orders/ord%2F1/cancel');
+  });
+
+  it('raises when the order is past the point a partner can cancel it', async () => {
+    const { client } = makeClient([errorResponse(422, 'VALIDATION_FAILED')], { maxRetries: 0 });
+
+    await assert.rejects(client.orders.cancel(ORDER_ID), ValidationFailedError);
   });
 });
 

@@ -69,6 +69,28 @@ describe('autoPage', () => {
     assert.equal(calls.length, 1);
   });
 
+  it('stops on an empty cursor, which is the API saying there is no next page', async () => {
+    const { client, calls } = makeClient([cataloguePage(['A'], '')]);
+
+    const skus = [];
+    for await (const product of client.catalogue.autoPage()) skus.push(product.sku);
+
+    assert.deepEqual(skus, ['A']);
+    assert.equal(calls.length, 1);
+  });
+
+  it('stops on an empty cursor even when the previous page was empty too', async () => {
+    // The stall guard must not fire here: two empty cursors are termination,
+    // not a cursor that failed to move.
+    const { client, calls } = makeClient([cataloguePage([], '')]);
+
+    for await (const _product of client.catalogue.autoPage()) {
+      assert.fail('no items were queued');
+    }
+
+    assert.equal(calls.length, 1);
+  });
+
   it('raises rather than looping when the cursor stops moving', async () => {
     const { client } = makeClient([
       cataloguePage(['A'], 'cursor-2'),

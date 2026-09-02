@@ -5,6 +5,40 @@ All notable changes to this package are documented here. The format follows
 follows [semantic versioning](https://semver.org/spec/v2.0.0.html). The major
 version tracks the API path version: `1.x` speaks `/v1`.
 
+## [Unreleased]
+
+### Added
+
+- `orders.cancel(id, {note})` for `POST /v1/orders/{id}/cancel`.
+
+### Changed
+
+- `timeout` is now a deadline for the whole exchange, including reading the
+  response body. A server that sends headers and then stalls mid body fails at
+  the deadline instead of hanging, and the timeout is retried like any other
+  transport failure.
+- Redirects are never followed. A `3xx` other than `304` raises
+  `SolarJuiceError` carrying the status, rather than the client returning the
+  redirect target's body as if it were an API response.
+- A `2xx` body that is not a JSON object raises, carrying the status and the
+  request id, rather than being returned as a string.
+- `Retry-After` is honoured up to 60 seconds. Above that the client raises
+  immediately with the API's real value on `error.retryAfter` instead of
+  sleeping.
+- `timeout` must now be greater than zero. Zero was accepted and aborted every
+  request the moment it was sent.
+
+### Fixed
+
+- The rate limit window and request id keep their last seen values when a
+  response omits those headers, which every `/v1/health` call and every edge
+  error page does. They were being cleared on any header-less response.
+- `autoPage()` terminates on an empty `next_cursor` instead of raising
+  `PAGINATION_STALLED`.
+- `require()` of the package works on Node 22.12 and later. The Node 18 crypto
+  fallback used a top-level `await`, which made the module graph async and
+  raised `ERR_REQUIRE_ASYNC_MODULE`.
+
 ## [1.0.0] - 2026-09-02
 
 Initial release, matching version 1.0.0 of the Solar Juice Partner API.
