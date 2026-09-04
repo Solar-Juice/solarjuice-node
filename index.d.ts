@@ -118,6 +118,15 @@ export interface OrdersListParams extends PaginationParams {
 
 /* Catalogue */
 
+/** One product a kit is assembled from, and how many of it a single kit holds. */
+export interface KitComponent {
+  /** The component's own SKU. It is an ordinary catalogue SKU in its own right. */
+  sku: string;
+  /** How many of this component one kit contains. */
+  quantity: number;
+  [key: string]: unknown;
+}
+
 export interface CatalogueProduct {
   sku: string;
   title: string;
@@ -129,7 +138,34 @@ export interface CatalogueProduct {
   price: Money;
   /** The granted special that produced `price`, or null. */
   special: string | null;
+  /**
+   * Unit weight in kilograms, published for information. Freight is NOT
+   * priced from it: shipping.quote() plans every consignment from the
+   * product's shipping specification and never reads this field, so an
+   * estimate built from it will not match the rate you are quoted.
+   *
+   * On a kit it is the kit's own weight, the same as on any other product,
+   * and never null: one whose weight cannot be resolved is withheld from the
+   * catalogue rather than published. Do not recompute it from `components`.
+   */
   weight_kg: string;
+  /**
+   * True when this product is a kit: a bundle sold under one SKU that holds no
+   * stock of its own and is assembled from `components`. Present on every
+   * product, so branch on it rather than on the SKU prefix.
+   *
+   * A kit's `price` and `weight_kg` are both its own rather than totals of
+   * its parts; only its quantity in `/v1/inventory` is derived from them.
+   * Kits are visible only on channels where kit delivery is enabled;
+   * otherwise this is always false.
+   */
+  is_kit: boolean;
+  /**
+   * What the kit is assembled from. Present only when `is_kit` is true.
+   * Informational: neither the kit's price nor its weight can be rebuilt
+   * from it.
+   */
+  components?: KitComponent[];
   images: string[];
   updated_at: Timestamp;
   [key: string]: unknown;
@@ -150,7 +186,18 @@ export type AvailableByMetro = Record<Metro, number>;
 
 export interface InventoryItem {
   sku: string;
+  /**
+   * Sellable quantity per metro. For a kit each figure is derived:
+   * floor(min over components of (component_available / quantity)) in that
+   * metro, with a component absent from the metro counting as zero.
+   */
   available: AvailableByMetro;
+  /**
+   * Sum of `available` across all metros. For a kit that is the sum of the
+   * derived per metro figures, not a minimum against national component
+   * totals: a kit ships from one metro, so stock in Perth cannot complete a
+   * kit in Sydney.
+   */
   total: number;
   updated_at: Timestamp;
   [key: string]: unknown;
