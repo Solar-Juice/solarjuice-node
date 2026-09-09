@@ -105,6 +105,26 @@ export interface CatalogueListParams extends PaginationParams {
   category?: string;
 }
 
+/** A state Solar Juice holds stock in. `NT`, `TAS` and `ACT` are refused. */
+export type StockedState = 'NSW' | 'VIC' | 'QLD' | 'WA' | 'SA';
+
+export interface InventoryListParams extends PaginationParams {
+  /**
+   * Answer for one state instead of the whole country. `available` is then
+   * keyed by the state and `total` is that state's stock.
+   *
+   * `QLD` is served from Brisbane and Townsville and comes back as their
+   * sum. Case is ignored and the spelt out name is accepted, which the wider
+   * `string` in this union allows for; anything that is not a stocked state
+   * is a 400.
+   */
+  state?: StockedState | (string & {});
+}
+
+export interface InventoryGetParams {
+  state?: StockedState | (string & {});
+}
+
 export interface SpecialsListParams extends PaginationParams {
   /** Restrict to specials live right now. */
   active?: boolean;
@@ -181,7 +201,12 @@ export interface CatalogueList {
 
 /* Inventory */
 
-/** Sellable quantity keyed by metro. Metros with zero stock are omitted. */
+/**
+ * Sellable quantity keyed by metro. Metros with zero stock are omitted.
+ *
+ * With `state` on the request the map is keyed by that state instead and
+ * holds one entry: the state's total across the metros that serve it.
+ */
 export type AvailableByMetro = Record<Metro, number>;
 
 export interface InventoryItem {
@@ -208,6 +233,7 @@ export interface InventoryList {
   as_of_oldest: Timestamp;
   /** True when the feed is older than the threshold. Treat figures as indicative. */
   stale: boolean;
+  /** Every metro tracked, or the one requested state when `state` was sent. */
   locations: Metro[];
   items: InventoryItem[];
   next_cursor: Cursor | null;
@@ -218,6 +244,7 @@ export interface InventoryItemDetail extends InventoryItem {
   as_of: Timestamp;
   as_of_oldest: Timestamp;
   stale: boolean;
+  /** Every metro tracked, or the one requested state when `state` was sent. */
   locations: Metro[];
 }
 
@@ -415,9 +442,9 @@ export declare class CatalogueResource {
 }
 
 export declare class InventoryResource {
-  list(params?: PaginationParams): Promise<InventoryList>;
-  autoPage(params?: Omit<PaginationParams, 'cursor'>): AsyncGenerator<InventoryItem, void, undefined>;
-  get(sku: string): Promise<InventoryItemDetail>;
+  list(params?: InventoryListParams): Promise<InventoryList>;
+  autoPage(params?: Omit<InventoryListParams, 'cursor'>): AsyncGenerator<InventoryItem, void, undefined>;
+  get(sku: string, params?: InventoryGetParams): Promise<InventoryItemDetail>;
 }
 
 export declare class SpecialsResource {

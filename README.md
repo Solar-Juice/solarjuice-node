@@ -69,7 +69,7 @@ be revoked at any time.
 | `client.catalogue.list(params)` | `GET /v1/catalogue` |
 | `client.catalogue.get(sku)` | `GET /v1/catalogue/{sku}` |
 | `client.inventory.list(params)` | `GET /v1/inventory` |
-| `client.inventory.get(sku)` | `GET /v1/inventory/{sku}` |
+| `client.inventory.get(sku, params)` | `GET /v1/inventory/{sku}` |
 | `client.specials.list(params)` | `GET /v1/specials` |
 | `client.shipping.quote(body)` | `POST /v1/shipping/quotes` |
 | `client.orders.create(body, options)` | `POST /v1/orders` |
@@ -187,6 +187,31 @@ for await (const changed of client.catalogue.autoPage({ updated_since: first.as_
 
 Inventory rows that have dropped to zero come back from an `updated_since`
 query with `total: 0`, so you can clear them.
+
+### Stock in one state
+
+Pass `state` and the whole answer is scoped to it: `available` is keyed by the
+state and `total` is that state's stock, not the national figure. Nothing is
+left for you to add up.
+
+```js
+for await (const item of client.inventory.autoPage({ state: 'VIC' })) {
+  await setVictorianStock(item.sku, item.total); // Melbourne's figure
+}
+
+// Queensland is served from Brisbane AND Townsville, and comes back as
+// their sum, so a SKU stocked only in Townsville is Queensland stock.
+const qld = await client.inventory.get('20571', { state: 'QLD' });
+qld.available; // { QLD: 12302 }  (9494 Brisbane + 2808 Townsville)
+qld.total;     // 12302, not the national 43318
+```
+
+`NSW`, `VIC`, `QLD`, `WA` and `SA` are the states Solar Juice stocks. Case is
+ignored and the spelt out name works, so `VIC`, `vic` and `Victoria` are the
+same filter. There is no warehouse in `NT`, `TAS` or `ACT`, so those are a
+`400` rather than an empty list that would read as "out of stock everywhere".
+Omit `state` and you get every metro and the national total, exactly as
+before.
 
 ## Placing an order
 
