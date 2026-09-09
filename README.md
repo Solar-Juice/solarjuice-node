@@ -211,7 +211,11 @@ ignored and the spelt out name works, so `VIC`, `vic` and `Victoria` are the
 same filter. There is no warehouse in `NT`, `TAS` or `ACT`, so those are a
 `400` rather than an empty list that would read as "out of stock everywhere".
 Omit `state` and you get every metro and the national total, exactly as
-before.
+before. Leave it out rather than passing an empty string: this client sends
+any value that is not `undefined` or `null`, so `{ state: process.env.MY_STATE
+?? '' }` sends `?state=` and gets a `400`. That is deliberate. A blank state
+answered with national figures is how a partner ends up selling stock that is
+in another state. Passing `state` twice is a `400` for the same reason.
 
 ## Placing an order
 
