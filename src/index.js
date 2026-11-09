@@ -15,6 +15,7 @@ export {
   ConfigurationError,
   ForbiddenError,
   IdempotencyConflictError,
+  InsufficientStockError,
   InternalError,
   NotFoundError,
   PriceChangedError,

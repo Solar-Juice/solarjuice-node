@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   ForbiddenError,
   IdempotencyConflictError,
+  InsufficientStockError,
   InternalError,
   NotFoundError,
   PriceChangedError,
@@ -40,6 +41,7 @@ const ERROR_CLASSES = {
   ValidationFailed: ValidationFailedError,
   RateLimited: RateLimitedError,
   PriceChanged: PriceChangedError,
+  InsufficientStock: InsufficientStockError,
   IdempotencyConflict: IdempotencyConflictError,
   QuoteUnavailable: QuoteUnavailableError,
   StaleData: StaleDataError,

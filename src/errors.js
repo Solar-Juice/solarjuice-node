@@ -71,6 +71,8 @@ export class RateLimitedError extends SolarJuiceError {
 }
 /** 409: submitted prices or price_list_version no longer match. `details` carries current values. */
 export class PriceChangedError extends SolarJuiceError {}
+/** 409: a line asks for more than is currently sellable. `details` carries sku, requested and available. */
+export class InsufficientStockError extends SolarJuiceError {}
 /** 409: the same client_reference was submitted with a different body. */
 export class IdempotencyConflictError extends SolarJuiceError {}
 /** 503: the freight engine is temporarily unreachable. Honour `retryAfter`. */
@@ -94,6 +96,7 @@ const BY_CODE = new Map([
   ['VALIDATION_FAILED', ValidationFailedError],
   ['RATE_LIMITED', RateLimitedError],
   ['PRICE_CHANGED', PriceChangedError],
+  ['INSUFFICIENT_STOCK', InsufficientStockError],
   ['IDEMPOTENCY_CONFLICT', IdempotencyConflictError],
   ['QUOTE_UNAVAILABLE', QuoteUnavailableError],
   ['STALE_DATA', StaleDataError],
@@ -104,7 +107,7 @@ const BY_CODE = new Map([
  * Status to class, used when the body is not the documented error envelope
  * (a proxy 502, an HTML error page from an edge, a truncated response).
  *
- * 409 and 503 are deliberately absent: each covers two codes, so without a
+ * 409 and 503 are deliberately absent: each covers several codes, so without a
  * body there is nothing to choose between them and the base class is the
  * honest answer.
  */

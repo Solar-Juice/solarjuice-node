@@ -45,6 +45,7 @@ export type ErrorCode =
   | 'VALIDATION_FAILED'
   | 'RATE_LIMITED'
   | 'PRICE_CHANGED'
+  | 'INSUFFICIENT_STOCK'
   | 'IDEMPOTENCY_CONFLICT'
   | 'QUOTE_UNAVAILABLE'
   | 'STALE_DATA'
@@ -618,6 +619,7 @@ export declare class RateLimitedError extends SolarJuiceError {
   readonly retryAfter: number | null;
 }
 export declare class PriceChangedError extends SolarJuiceError {}
+export declare class InsufficientStockError extends SolarJuiceError {}
 export declare class IdempotencyConflictError extends SolarJuiceError {}
 export declare class QuoteUnavailableError extends SolarJuiceError {
   /** Seconds to wait, from Retry-After, when the header was present. */

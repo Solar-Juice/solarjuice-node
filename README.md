@@ -373,6 +373,7 @@ documented error code:
 | `ValidationFailedError` | `VALIDATION_FAILED` | 422 |
 | `RateLimitedError` | `RATE_LIMITED` | 429 |
 | `PriceChangedError` | `PRICE_CHANGED` | 409 |
+| `InsufficientStockError` | `INSUFFICIENT_STOCK` | 409 |
 | `IdempotencyConflictError` | `IDEMPOTENCY_CONFLICT` | 409 |
 | `QuoteUnavailableError` | `QUOTE_UNAVAILABLE` | 503 |
 | `StaleDataError` | `STALE_DATA` | 503 |

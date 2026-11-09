@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   ForbiddenError,
   IdempotencyConflictError,
+  InsufficientStockError,
   InternalError,
   NotFoundError,
   PriceChangedError,
@@ -25,6 +26,7 @@ const MAPPINGS = [
   [422, 'VALIDATION_FAILED', ValidationFailedError],
   [429, 'RATE_LIMITED', RateLimitedError],
   [409, 'PRICE_CHANGED', PriceChangedError],
+  [409, 'INSUFFICIENT_STOCK', InsufficientStockError],
   [409, 'IDEMPOTENCY_CONFLICT', IdempotencyConflictError],
   [503, 'QUOTE_UNAVAILABLE', QuoteUnavailableError],
   [503, 'STALE_DATA', StaleDataError],
