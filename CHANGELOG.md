@@ -10,6 +10,8 @@ version tracks the API path version: `1.x` speaks `/v1`.
 ### Added
 
 - `orders.cancel(id, {note})` for `POST /v1/orders/{id}/cancel`.
+- `webhooks` resource group: `list()`, `create(body)`, `delete(id)`,
+  `enable(id)` and `test(id)` for `/v1/webhooks`.
 
 ### Changed
 

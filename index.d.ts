@@ -428,6 +428,58 @@ export interface OrderList {
   [key: string]: unknown;
 }
 
+/* Webhooks */
+
+/** Events an endpoint can subscribe to. */
+export type WebhookEvent = 'catalogue.updated' | 'specials.updated';
+
+export interface WebhookCreateRequest {
+  /** HTTPS endpoint to POST deliveries to. No credentials, no fragment, publicly reachable. */
+  url: string;
+  /** At least one event. */
+  events: WebhookEvent[];
+  /** Up to 200 characters. */
+  description?: string | null;
+}
+
+export interface WebhookEndpoint {
+  id: string;
+  channel_id: string;
+  url: string;
+  events: WebhookEvent[];
+  status: 'active' | 'disabled';
+  description?: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  disabled_at?: Timestamp | null;
+  disabled_reason?: string | null;
+  last_success_at?: Timestamp | null;
+  last_attempt_at?: Timestamp | null;
+  /** HTTP status of the most recent delivery attempt. */
+  last_status?: number | null;
+  last_error?: string | null;
+  /** Failed attempts in a row. The endpoint is disabled at 200. */
+  consecutive_failures: number;
+  [key: string]: unknown;
+}
+
+export interface CreatedWebhookEndpoint extends WebhookEndpoint {
+  /** The HMAC signing secret. Returned once, never again. */
+  secret: string;
+}
+
+export interface WebhookList {
+  endpoints: WebhookEndpoint[];
+  [key: string]: unknown;
+}
+
+export interface WebhookTestReceipt {
+  queued: boolean;
+  event: string;
+  note?: string;
+  [key: string]: unknown;
+}
+
 export interface Health {
   status: string;
   [key: string]: unknown;
@@ -481,6 +533,18 @@ export declare class OrdersResource {
   cancel(id: string, options?: CancelOrderOptions): Promise<Order>;
 }
 
+export declare class WebhooksResource {
+  /** Every endpoint, disabled ones included. Not paginated. */
+  list(): Promise<WebhookList>;
+  /** The secret on the result is shown once. Store it straight away. */
+  create(body: WebhookCreateRequest): Promise<CreatedWebhookEndpoint>;
+  delete(id: string): Promise<void>;
+  /** Re-enable a disabled endpoint, keeping its id and secret. */
+  enable(id: string): Promise<WebhookEndpoint>;
+  /** Queue a webhook.test delivery. Refused for a disabled endpoint. */
+  test(id: string): Promise<WebhookTestReceipt>;
+}
+
 export declare class SolarJuiceClient {
   constructor(options?: ClientOptions);
 
@@ -489,6 +553,7 @@ export declare class SolarJuiceClient {
   readonly specials: SpecialsResource;
   readonly shipping: ShippingResource;
   readonly orders: OrdersResource;
+  readonly webhooks: WebhooksResource;
 
   readonly baseUrl: string;
   readonly userAgent: string;

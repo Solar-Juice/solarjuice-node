@@ -16,6 +16,7 @@ import { jsonResponse, makeClient } from '../test-helpers/stub-fetch.js';
 const SAMPLE = {
   sku: 'GW-5000-DNS-30',
   id: 'ord_01J6ZK3M5X8QW2R7Y9V4B1N0PD',
+  webhook_id: 'wh_01m24fj0js2r8nkr2pwhc6wykm',
 };
 
 /**
@@ -35,6 +36,14 @@ const IMPLEMENTATIONS = {
   listOrders: { call: 'orders.list()', invoke: (client) => client.orders.list() },
   getOrder: { call: 'orders.get(id)', invoke: (client) => client.orders.get(SAMPLE.id) },
   cancelOrder: { call: 'orders.cancel(id)', invoke: (client) => client.orders.cancel(SAMPLE.id) },
+  listWebhooks: { call: 'webhooks.list()', invoke: (client) => client.webhooks.list() },
+  createWebhook: {
+    call: 'webhooks.create(body)',
+    invoke: (client) => client.webhooks.create({ url: 'https://example.partner.com.au/hooks/solarjuice', events: ['catalogue.updated'] }),
+  },
+  deleteWebhook: { call: 'webhooks.delete(id)', invoke: (client) => client.webhooks.delete(SAMPLE.webhook_id) },
+  enableWebhook: { call: 'webhooks.enable(id)', invoke: (client) => client.webhooks.enable(SAMPLE.webhook_id) },
+  testWebhook: { call: 'webhooks.test(id)', invoke: (client) => client.webhooks.test(SAMPLE.webhook_id) },
   getHealth: { call: 'health()', invoke: (client) => client.health() },
 };
 

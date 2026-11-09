@@ -76,6 +76,11 @@ be revoked at any time.
 | `client.orders.list(params)` | `GET /v1/orders` |
 | `client.orders.get(id, options)` | `GET /v1/orders/{id}` |
 | `client.orders.cancel(id, options)` | `POST /v1/orders/{id}/cancel` |
+| `client.webhooks.list()` | `GET /v1/webhooks` |
+| `client.webhooks.create(body)` | `POST /v1/webhooks` |
+| `client.webhooks.delete(id)` | `DELETE /v1/webhooks/{id}` |
+| `client.webhooks.enable(id)` | `POST /v1/webhooks/{id}/enable` |
+| `client.webhooks.test(id)` | `POST /v1/webhooks/{id}/test` |
 | `client.health()` | `GET /v1/health` |
 
 Every list call also has an `autoPage()` variant. Money is a decimal string
@@ -322,6 +327,37 @@ Once the order is `processing` or beyond, the API refuses with
 `ValidationFailedError` and the cancellation has to go through your account
 manager. `cancelled` is terminal, so a second call is refused rather than
 being a no-op: check the status you already hold before calling.
+
+## Webhooks
+
+Register an HTTPS endpoint and Solar Juice tells you when the catalogue or
+your specials change. Any key for your channel can manage its endpoints.
+
+```js
+const endpoint = await client.webhooks.create({
+  url: 'https://your-host.example/hooks/solarjuice',
+  events: ['catalogue.updated', 'specials.updated'],
+});
+
+// Shown once. Store it in a secrets manager now.
+const secret = endpoint.secret;
+
+// Send yourself a signed test delivery to prove the receiver works.
+await client.webhooks.test(endpoint.id);
+```
+
+A delivery is a notification, not the data: on receipt, re-fetch the affected
+resource with `updated_since`. Verify the `X-SolarJuice-Signature` header
+against the raw body before parsing it; the reference at
+https://dev.solarjuice.com.au/docs shows how.
+
+`client.webhooks.list()` returns `{ endpoints }` with delivery health for each
+(`last_status`, `last_error`, `consecutive_failures`). After repeated failures
+an endpoint is switched to `disabled`. Once your receiver is healthy again,
+`client.webhooks.enable(id)` turns it back on with the same id and secret.
+`client.webhooks.test(id)` on a disabled endpoint raises
+`ValidationFailedError`. `client.webhooks.delete(id)` removes an endpoint and
+invalidates its secret; to rotate a secret, delete and register again.
 
 ## Errors
 

@@ -5,6 +5,7 @@ import { InventoryResource } from './resources/inventory.js';
 import { OrdersResource } from './resources/orders.js';
 import { ShippingResource } from './resources/shipping.js';
 import { SpecialsResource } from './resources/specials.js';
+import { WebhooksResource } from './resources/webhooks.js';
 
 const API_KEY_ENV_VAR = 'SOLARJUICE_API_KEY';
 
@@ -51,6 +52,8 @@ export class SolarJuiceClient {
     this.shipping = new ShippingResource(this.#transport);
     /** Orders placed against this channel's trade account. */
     this.orders = new OrdersResource(this.#transport);
+    /** Webhook endpoints registered by this channel. */
+    this.webhooks = new WebhooksResource(this.#transport);
   }
 
   /** Base URL in use. */
